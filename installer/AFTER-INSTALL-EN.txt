@@ -1,0 +1,21 @@
+Mugen Heartbeat is installed.
+
+No account. No cloud. No subscription. Just your heartbeat.
+
+Next:
+1. Start OBS Studio.
+2. Add a new source.
+3. Choose "Mugen Heartbeat".
+4. On Xiaomi Smart Band 10, enable heart-rate sharing before searching for devices.
+
+Installed plugin:
+C:\ProgramData\obs-studio\plugins\mugen-heartbeat
+
+Your per-user settings and community skins are stored separately under:
+%APPDATA%\obs-studio\plugin_config\mugen-heartbeat
+
+Updating or uninstalling Mugen Heartbeat does not automatically remove that
+per-user folder.
+
+Project and releases:
+https://github.com/Mugen-Art-Lab/Mugen-Heartbeat

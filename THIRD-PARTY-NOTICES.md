@@ -1,0 +1,32 @@
+
+# Third-party notices
+
+Mugen Heartbeat is licensed under GPL-2.0-or-later. See `LICENSE`.
+
+## msdfgen
+
+Mugen Heartbeat uses **msdfgen-core v1.13** for MTSDF text rendering.
+
+- Project: msdfgen
+- Author: Viktor Chlumsky
+- Upstream: https://github.com/Chlumsky/msdfgen
+- Version: v1.13
+- License: MIT
+
+The complete MIT license text is included in:
+
+`LICENSES/msdfgen-MIT.txt`
+
+The build enables `MSDFGEN_CORE_ONLY`. Mugen Heartbeat does not use the msdfgen
+extension module in this configuration.
+
+## OBS Studio / libobs
+
+Mugen Heartbeat is an independent third-party plugin built against OBS Studio /
+libobs.
+
+- Upstream: https://github.com/obsproject/obs-studio
+- Build target pinned by this repository: OBS Studio 31.1.1
+- License: GNU General Public License version 2 or later
+
+OBS Studio itself is not bundled inside the Mugen Heartbeat plugin package.

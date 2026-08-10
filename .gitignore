@@ -1,0 +1,65 @@
+
+# Keep the repository intentionally small: ignore root items unless explicitly
+# whitelisted below.
+/*
+
+!/.github/
+!/build-aux/
+!/cmake/
+!/data/
+!/docs/
+!/installer/
+!/LICENSES/
+!/src/
+!/tools/
+
+!.clang-format
+!.gitattributes
+!.gersemirc
+!.gitignore
+
+!AI-DISCLOSURE.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!INSTALL.md
+!INSTALL-RU.md
+!LICENSE
+!README.md
+!README-RU.md
+!SKIN-FORMAT.md
+!SKIN-FORMAT.ru.md
+!SUPPORT.md
+!THIRD-PARTY-NOTICES.md
+!VERSION
+
+!buildspec.json
+!CMakeLists.txt
+!CMakePresets.json
+
+# Local/generated content
+*.lock.json
+*.bak
+*.tmp
+*~
+.DS_Store
+/cmake/.CMakeBuildNumber
+/build/
+/build_x64/
+/build_macos/
+/build_x86_64/
+/build-workspace/
+/release/
+/.deps/
+/.vs/
+*.pdb
+*.obj
+*.ilk
+*.exp
+*.user
+
+# Release tooling
+!BUILD_RELEASE.cmd
+
+# Generated release outputs
+/release/
+/release-work/

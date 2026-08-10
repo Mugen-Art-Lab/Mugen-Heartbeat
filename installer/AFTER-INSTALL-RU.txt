@@ -1,0 +1,21 @@
+Mugen Heartbeat установлен.
+
+No account. No cloud. No subscription. Just your heartbeat.
+
+Дальше:
+1. Запусти OBS Studio.
+2. Добавь новый источник.
+3. Выбери «Mugen Heartbeat».
+4. На Xiaomi Smart Band 10 включи передачу пульса перед поиском устройств.
+
+Плагин установлен сюда:
+C:\ProgramData\obs-studio\plugins\mugen-heartbeat
+
+Пользовательские настройки и community-скины хранятся отдельно:
+%APPDATA%\obs-studio\plugin_config\mugen-heartbeat
+
+Обновление или удаление Mugen Heartbeat автоматически эту пользовательскую
+папку не удаляет.
+
+Проект и релизы:
+https://github.com/Mugen-Art-Lab/Mugen-Heartbeat

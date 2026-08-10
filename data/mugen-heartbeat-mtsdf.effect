@@ -1,0 +1,155 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform float4 fillColor;
+uniform float4 outlineColor;
+
+uniform float outlineSize;
+uniform float pxRange;
+uniform float2 textureSize;
+uniform float pulseScale;
+
+sampler_state linearSampler {
+	Filter = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+	float2 localPos : TEXCOORD1;
+	float2 pulseData : TEXCOORD2;
+	float2 pulseCenter : TEXCOORD3;
+};
+
+struct FragData {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+	float2 localPos : TEXCOORD1;
+};
+
+FragData VSDefault(VertData vert_in)
+{
+	FragData output;
+
+	float2 local = vert_in.localPos;
+
+	if (vert_in.pulseData.x > 0.5) {
+		local =
+			vert_in.pulseCenter +
+			(local - vert_in.pulseCenter) *
+				pulseScale;
+	}
+
+	output.pos =
+		mul(float4(local.xy, 0.0, 1.0), ViewProj);
+
+	output.uv = vert_in.uv;
+	output.localPos = local;
+	return output;
+}
+
+float median3(float a, float b, float c)
+{
+	return max(min(a, b), min(max(a, b), c));
+}
+
+float2 safe_fwidth(float2 value)
+{
+	return max(
+		abs(ddx(value)) + abs(ddy(value)),
+		float2(0.000001, 0.000001));
+}
+
+float4 PSDraw(FragData vert_in) : TARGET
+{
+	float4 field =
+		image.Sample(linearSampler, vert_in.uv);
+
+	float signedDistance =
+		median3(field.r, field.g, field.b) - 0.5;
+
+	float2 uvWidth =
+		safe_fwidth(vert_in.uv);
+
+	float2 screenTexSize =
+		1.0 / uvWidth;
+
+	float2 unitRange =
+		float2(pxRange, pxRange) /
+		textureSize;
+
+	float screenPxRange =
+		max(
+			0.5 *
+				dot(unitRange, screenTexSize),
+			1.0);
+
+	float screenDistance =
+		signedDistance *
+		screenPxRange;
+
+	float fillMask =
+		saturate(
+			screenDistance + 0.5);
+
+	float2 localWidth =
+		safe_fwidth(
+			vert_in.localPos);
+
+	float sourceScreenScale =
+		max(
+			1.0 / localWidth.x,
+			1.0 / localWidth.y);
+
+	float outlineScreen =
+		max(outlineSize, 0.0) *
+		sourceScreenScale;
+
+	float outerMask =
+		saturate(
+			screenDistance +
+			outlineScreen +
+			0.5);
+
+	float fillA =
+		fillMask *
+		fillColor.a;
+
+	float outlineA =
+		outerMask *
+		outlineColor.a;
+
+	float outA =
+		fillA +
+		outlineA *
+			(1.0 - fillA);
+
+	float3 premul =
+		fillColor.rgb *
+			fillA +
+		outlineColor.rgb *
+			outlineA *
+			(1.0 - fillA);
+
+	float3 outRgb =
+		(outA > 0.000001)
+			? premul / outA
+			: float3(
+				0.0, 0.0, 0.0);
+
+	return float4(outRgb, outA);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader =
+			VSDefault(vert_in);
+
+		pixel_shader =
+			PSDraw(vert_in);
+	}
+}

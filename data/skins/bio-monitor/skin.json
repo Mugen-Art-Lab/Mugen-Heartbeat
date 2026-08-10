@@ -1,0 +1,310 @@
+{
+    "schema":  1,
+    "id":  "bio-monitor",
+    "name":  "Bio Monitor",
+    "author":  "Mugen Art Lab",
+    "version":  "1.8",
+    "description":  {
+                        "en":  "Retro survival-horror inspired vital-sign monitor with left-to-right beat-synced ECG sweep, box-aligned MTSDF text and adjustable background opacity. Original design by Mugen Art Lab.",
+                        "ru":  "Ретро-монитор жизненных показателей в духе survival horror с ЭКГ, идущей слева направо в такт пульсу, точно выровненным MTSDF-текстом и регулируемой непрозрачностью фона. Оригинальный дизайн от Mugen Art Lab."
+                    },
+    "canvas":  {
+                   "width":  640,
+                   "height":  280,
+                   "background":  "#090e11"
+               },
+    "offline":  {
+                    "color":  "#738087",
+                    "status":  "NO SIGNAL"
+                },
+    "zones":  [
+                  {
+                      "max_bpm":  89,
+                      "color":  "#45d36b",
+                      "status":  "STABLE"
+                  },
+                  {
+                      "max_bpm":  119,
+                      "color":  "#e0b54c",
+                      "status":  "CAUTION"
+                  },
+                  {
+                      "max_bpm":  240,
+                      "color":  "#e85757",
+                      "status":  "DANGER"
+                  }
+              ],
+    "elements":  [
+                     {
+                         "type":  "rect",
+                         "x":  14,
+                         "y":  14,
+                         "width":  612,
+                         "height":  2,
+                         "color":  "#3a454b",
+                         "opacity":  95
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  14,
+                         "y":  264,
+                         "width":  612,
+                         "height":  2,
+                         "color":  "#3a454b",
+                         "opacity":  95
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  14,
+                         "y":  14,
+                         "width":  2,
+                         "height":  252,
+                         "color":  "#3a454b",
+                         "opacity":  95
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  624,
+                         "y":  14,
+                         "width":  2,
+                         "height":  252,
+                         "color":  "#3a454b",
+                         "opacity":  95
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "VITAL STATUS",
+                         "x":  28,
+                         "y":  18,
+                         "font":  "Arial",
+                         "size":  18,
+                         "bold":  true,
+                         "color":  "#aab5bb",
+                         "opacity":  92,
+                         "width":  220,
+                         "height":  24,
+                         "align":  "left",
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "MUGEN // HR-01",
+                         "x":  470,
+                         "y":  18,
+                         "width":  140,
+                         "align":  "right",
+                         "font":  "Arial",
+                         "size":  10,
+                         "bold":  true,
+                         "color":  "#647279",
+                         "opacity":  80,
+                         "height":  20,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  44,
+                         "y":  61,
+                         "width":  552,
+                         "height":  166,
+                         "color":  "#1a252c",
+                         "opacity":  30
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  44,
+                         "y":  61,
+                         "width":  3,
+                         "height":  166,
+                         "color":  "zone",
+                         "opacity":  80
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  44,
+                         "y":  61,
+                         "width":  552,
+                         "height":  1,
+                         "color":  "zone",
+                         "opacity":  40
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  64,
+                         "y":  90,
+                         "width":  512,
+                         "height":  1,
+                         "color":  "#263238",
+                         "opacity":  55
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  64,
+                         "y":  115,
+                         "width":  512,
+                         "height":  1,
+                         "color":  "#263238",
+                         "opacity":  42
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  64,
+                         "y":  140,
+                         "width":  512,
+                         "height":  1,
+                         "color":  "#263238",
+                         "opacity":  55
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  64,
+                         "y":  165,
+                         "width":  512,
+                         "height":  1,
+                         "color":  "#263238",
+                         "opacity":  42
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  64,
+                         "y":  190,
+                         "width":  512,
+                         "height":  1,
+                         "color":  "#263238",
+                         "opacity":  55
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "{heart}",
+                         "x":  67,
+                         "y":  66,
+                         "font":  "Arial",
+                         "size":  30,
+                         "bold":  true,
+                         "color":  "zone",
+                         "pulse":  true,
+                         "width":  32,
+                         "height":  32,
+                         "align":  "center",
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "HEART TRACE",
+                         "x":  110,
+                         "y":  70,
+                         "font":  "Arial",
+                         "size":  11,
+                         "bold":  true,
+                         "color":  "#738087",
+                         "opacity":  80,
+                         "width":  150,
+                         "height":  24,
+                         "align":  "left",
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "ecg",
+                         "x":  70,
+                         "y":  109,
+                         "width":  250,
+                         "height":  69,
+                         "color":  "zone",
+                         "opacity":  100,
+                         "pulse":  true,
+                         "line_thickness":  2,
+                         "history_ms":  3600,
+                         "amplitude":  0.88,
+                         "baseline_opacity":  18
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "BPM",
+                         "x":  360,
+                         "y":  72,
+                         "width":  190,
+                         "align":  "center",
+                         "font":  "Arial",
+                         "size":  17,
+                         "bold":  true,
+                         "color":  "#aab5bb",
+                         "opacity":  90,
+                         "height":  22,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "{bpm}",
+                         "x":  350,
+                         "y":  94,
+                         "width":  210,
+                         "align":  "center",
+                         "font":  "Arial",
+                         "size":  68,
+                         "bold":  true,
+                         "color":  "zone",
+                         "pulse":  true,
+                         "outline":  true,
+                         "outline_size":  2,
+                         "outline_color":  "#071014",
+                         "outline_opacity":  100,
+                         "height":  76,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "rect",
+                         "x":  375,
+                         "y":  174,
+                         "width":  160,
+                         "height":  22,
+                         "color":  "zone",
+                         "opacity":  12
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "{status}",
+                         "x":  375,
+                         "y":  174,
+                         "width":  160,
+                         "align":  "center",
+                         "font":  "Arial",
+                         "size":  15,
+                         "bold":  true,
+                         "color":  "zone",
+                         "height":  22,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "MUGEN // BIO MONITOR",
+                         "x":  28,
+                         "y":  238,
+                         "font":  "Arial",
+                         "size":  12,
+                         "color":  "#69777e",
+                         "opacity":  85,
+                         "width":  220,
+                         "height":  22,
+                         "align":  "left",
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "SKIN 01 / V1.8",
+                         "x":  470,
+                         "y":  238,
+                         "width":  140,
+                         "align":  "right",
+                         "font":  "Arial",
+                         "size":  10,
+                         "color":  "#566269",
+                         "opacity":  75,
+                         "height":  22,
+                         "valign":  "center"
+                     }
+                 ],
+    "customization":  {
+                          "background_opacity":  true,
+                          "background_opacity_default":  100
+                      }
+}

@@ -1,0 +1,105 @@
+{
+    "schema":  1,
+    "id":  "heartbeat-lite",
+    "name":  "Heartbeat Lite",
+    "author":  "Mugen Art Lab",
+    "version":  "1.4",
+    "description":  {
+                        "en":  "Compact high-resolution stream HUD with beat-synced ECG, BPM, status and adjustable background opacity. Original design by Mugen Art Lab.",
+                        "ru":  "Компактный HUD высокого разрешения для стрима с синхронизированной с пульсом ЭКГ, BPM, статусом и регулируемой непрозрачностью фона. Оригинальный дизайн от Mugen Art Lab."
+                    },
+    "canvas":  {
+                   "width":  840,
+                   "height":  192,
+                   "background":  "#090e11"
+               },
+    "offline":  {
+                    "color":  "#738087",
+                    "status":  "NO SIGNAL"
+                },
+    "zones":  [
+                  {
+                      "max_bpm":  89,
+                      "color":  "#45d36b",
+                      "status":  "STABLE"
+                  },
+                  {
+                      "max_bpm":  119,
+                      "color":  "#e0b54c",
+                      "status":  "CAUTION"
+                  },
+                  {
+                      "max_bpm":  240,
+                      "color":  "#e85757",
+                      "status":  "DANGER"
+                  }
+              ],
+    "elements":  [
+                     {
+                         "type":  "ecg",
+                         "x":  84,
+                         "y":  36,
+                         "width":  440,
+                         "height":  120,
+                         "color":  "zone",
+                         "opacity":  100,
+                         "pulse":  true,
+                         "line_thickness":  4,
+                         "history_ms":  2800,
+                         "amplitude":  0.88,
+                         "baseline_opacity":  18
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "{bpm}",
+                         "x":  548,
+                         "y":  10,
+                         "width":  256,
+                         "align":  "center",
+                         "font":  "Arial",
+                         "size":  96,
+                         "bold":  true,
+                         "color":  "zone",
+                         "pulse":  true,
+                         "outline":  true,
+                         "outline_size":  4,
+                         "outline_color":  "#071014",
+                         "outline_opacity":  100,
+                         "height":  116,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "BPM",
+                         "x":  732,
+                         "y":  16,
+                         "width":  92,
+                         "align":  "right",
+                         "font":  "Arial",
+                         "size":  20,
+                         "bold":  true,
+                         "color":  "#aab5bb",
+                         "opacity":  70,
+                         "height":  36,
+                         "valign":  "center"
+                     },
+                     {
+                         "type":  "text",
+                         "value":  "{status}",
+                         "x":  548,
+                         "y":  132,
+                         "width":  256,
+                         "align":  "center",
+                         "font":  "Arial",
+                         "size":  24,
+                         "bold":  true,
+                         "color":  "zone",
+                         "height":  40,
+                         "valign":  "center"
+                     }
+                 ],
+    "customization":  {
+                          "background_opacity":  true,
+                          "background_opacity_default":  80
+                      }
+}
