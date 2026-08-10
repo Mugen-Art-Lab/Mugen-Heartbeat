@@ -1,4 +1,3 @@
-
 # Mugen Heartbeat
 
 [Русская версия](README-RU.md)
@@ -11,6 +10,20 @@ brings live BPM into OBS without an account, cloud service, browser source, or
 subscription.
 
 The current hardware-verified target is **Xiaomi Smart Band 10**.
+
+## Preview
+
+### Heartbeat Lite
+
+A compact HUD intended to stay out of the way during gameplay.
+
+![Heartbeat Lite overlay](previews/heartbeat-lite-overlay.png)
+
+### Bio Monitor
+
+A larger vital-sign display that also demonstrates the skin engine.
+
+![Bio Monitor overlay](previews/bio-monitor-overlay.png)
 
 ## Requirements
 
@@ -80,6 +93,14 @@ Rate Measurement characteristic (`0x2A37`).
 Other wearables and heart-rate sensors that expose the same standard BLE service
 may work, but should be treated as unverified until tested on real hardware.
 
+
+## Plain text mode
+
+Skins are optional. Mugen Heartbeat can also render a compact text source with
+custom format, font, color, opacity, outline and shadow settings.
+
+![Plain text mode](previews/plain-text-mode.png)
+
 ## Heart-rate reactions
 
 Each Mugen Heartbeat source can configure up to three reactions. A reaction can:
@@ -92,7 +113,13 @@ Each Mugen Heartbeat source can configure up to three reactions. A reaction can:
 The separate trigger/reset thresholds provide hysteresis so a reaction does not
 rapidly flap when BPM hovers around one value.
 
+
+![OBS heart-rate reaction settings](previews/bpm-reaction-settings.png)
+
 ## Skins
+
+
+![Built-in skin selection and per-skin settings](previews/skins-and-settings.png)
 
 The plugin ships with two built-in skins:
 
@@ -133,8 +160,7 @@ Windows build instructions are in [docs/BUILDING.md](docs/BUILDING.md).
   documentation;
 - `cmake/` and `build-aux/` — OBS plugin-template build infrastructure;
 - `docs/` — build documentation;
-- `LICENSES/` — third-party license texts.
-
+- `LICENSES/` — third-party license texts;
 - `installer/` — bilingual Inno Setup installer sources;
 - `tools/` — local build and release packaging scripts.
 
