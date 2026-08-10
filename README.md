@@ -161,6 +161,7 @@ Windows build instructions are in [docs/BUILDING.md](docs/BUILDING.md).
 - `cmake/` and `build-aux/` — OBS plugin-template build infrastructure;
 - `docs/` — build documentation;
 - `LICENSES/` — third-party license texts;
+- `previews/` — README screenshots and visual examples;
 - `installer/` — bilingual Inno Setup installer sources;
 - `tools/` — local build and release packaging scripts.
 
