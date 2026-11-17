@@ -13,7 +13,7 @@ Initial public release.
 - User/community skin format with bilingual documentation.
 - Windows installer and manual ZIP package.
 
-## 0.1.38 — release candidate
+## 0.1.38
 
 - Package both modern and legacy Windows plugin DLL layouts for OBS Studio 33 and earlier supported OBS versions.
 - Add OBS plugin-manager metadata with the product name, version, description, and official links.

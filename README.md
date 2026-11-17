@@ -40,8 +40,13 @@ by the wearable.
 
 Release builds are distributed through GitHub Releases.
 
-The recommended package is the Windows installer. A manual ZIP package is also
-provided for users who prefer to inspect and install the plugin themselves.
+Choose the package that matches your OBS installation:
+
+- **Windows Setup EXE (recommended):** guided installation into the standard OBS plugin directory.
+- **Windows x64 ZIP:** manual installation into the standard OBS plugin directory.
+- **Windows x64 Portable ZIP:** extract directly into the root of a portable OBS installation. Includes the OBS 32 legacy layout and the OBS 33+ plugin layout.
+
+See [INSTALL.md](INSTALL.md) for step-by-step installation, updating, and removal.
 
 GitHub's automatically generated **Source code** archives contain the project
 source, not a ready-to-install OBS plugin.
