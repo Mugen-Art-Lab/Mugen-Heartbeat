@@ -10,6 +10,11 @@
 #include "mtsdf-text-renderer.hpp"
 #include "heartbeat-skin-engine.hpp"
 #include <graphics/matrix4.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -78,6 +83,12 @@ static constexpr const char *REACTION_ENABLED_KEYS[HEARTBEAT_REACTION_COUNT] = {
 	"reaction_1_enabled",
 	"reaction_2_enabled",
 	"reaction_3_enabled",
+};
+
+static constexpr const char *REACTION_UI_TOGGLE_KEYS[HEARTBEAT_REACTION_COUNT] = {
+	"reaction_1_ui_toggle",
+	"reaction_2_ui_toggle",
+	"reaction_3_ui_toggle",
 };
 
 static constexpr const char *REACTION_ACTION_KEYS[HEARTBEAT_REACTION_COUNT] = {
@@ -318,7 +329,7 @@ public:
 			set_state(BleState::Idle, {});
 	}
 
-		void connect(uint64_t address)
+	void connect(uint64_t address, bool maintain_connection)
 	{
 		constexpr int64_t FRESH_ADVERTISEMENT_MS = 7000;
 
@@ -359,7 +370,7 @@ public:
 		connect_cancel_requested_.store(false);
 
 		connection_thread_ =
-			std::thread([this, address, address_type]() {
+			std::thread([this, address, address_type, maintain_connection]() {
 				try {
 					winrt::init_apartment(
 						winrt::apartment_type::multi_threaded);
@@ -410,7 +421,7 @@ public:
 					     session.CanMaintainConnection() ? "yes" : "no",
 					     static_cast<int>(session.SessionStatus()));
 
-					if (!session.CanMaintainConnection())
+					if (maintain_connection && !session.CanMaintainConnection())
 						throw std::runtime_error(
 							"Windows reports that this GATT session cannot maintain a connection.");
 
@@ -507,13 +518,16 @@ public:
 						address,
 						sanitize_ble_name(to_string(device.Name())));
 
-					maintain_session_.store(true);
-					session.MaintainConnection(true);
+					/* An explicit Connect still initiates uncached GATT
+					   discovery, but must not arm endless Windows reconnect. */
+					session.MaintainConnection(maintain_connection);
+					maintain_session_.store(maintain_connection);
 
 					blog(
 						LOG_INFO,
-						"[Mugen Heartbeat] GATT MaintainConnection enabled; "
-						"starting uncached Heart Rate discovery immediately.");
+						"[Mugen Heartbeat] GATT MaintainConnection %s; "
+						"starting uncached Heart Rate discovery immediately.",
+						maintain_connection ? "enabled" : "disabled (manual)");
 
 					/* Do not wait for BluetoothLEDevice::ConnectionStatus to
 					   remain Connected before issuing GATT traffic. Windows
@@ -523,9 +537,18 @@ public:
 					   idle link before our polling loop wakes up. */
 					auto wait_for_heart_rate_service = [&]() -> GattDeviceService {
 						unsigned attempt = 0;
+						const int64_t discovery_start_ms = steady_ms();
+						constexpr int64_t MANUAL_DISCOVERY_LIMIT_MS = 60000;
 
 						while (!connect_cancel_requested_.load() &&
 						       !shutdown_.load()) {
+							/* Manual click is not permission to wait forever. */
+							if (!maintain_session_.load() &&
+							    steady_ms() - discovery_start_ms >=
+								    MANUAL_DISCOVERY_LIMIT_MS)
+								throw std::runtime_error(
+									"Manual Heart Rate service connection timed out; "
+									"press Connect to try again.");
 							++attempt;
 
 							if (attempt == 1)
@@ -720,6 +743,43 @@ public:
 					}
 				}
 			});
+	}
+
+	/* The checkbox may change while a manual connection is live.
+	   Update Windows auto-maintenance without disconnecting an active Band. */
+	void set_connection_maintenance(uint64_t address, bool enabled)
+	{
+		if (!address || target_address_.load() != address)
+			return;
+
+		const BleState state = state_.load();
+		if (state != BleState::Connecting &&
+		    state != BleState::Connected)
+			return;
+
+		if (maintain_session_.load() == enabled)
+			return;
+
+		GattSession session = nullptr;
+		{
+			std::scoped_lock lock(connection_mutex_);
+			session = gatt_session_;
+		}
+		if (!session)
+			return;
+
+		try {
+			session.MaintainConnection(enabled);
+			maintain_session_.store(enabled);
+			blog(LOG_INFO,
+			     "[Mugen Heartbeat] Windows GATT auto-maintenance %s "
+			     "(controlled by source auto-connect settings).",
+			     enabled ? "enabled" : "disabled");
+		} catch (hresult_error const &e) {
+			blog(LOG_WARNING,
+			     "[Mugen Heartbeat] Could not update GATT auto-maintenance: %s",
+			     to_string(e.message()).c_str());
+		}
 	}
 
 	void disconnect()
@@ -2003,6 +2063,7 @@ struct mugen_heartbeat_source {
 	bool auto_connect = false;
 	bool auto_connect_paused = false;
 	bool manual_connect_pending = false;
+	int64_t manual_connect_deadline_ms = 0;
 	uint64_t selected_address = 0;
 	std::string selected_device_name;
 	int64_t next_auto_connect_ms = 0;
@@ -2010,6 +2071,8 @@ struct mugen_heartbeat_source {
 	int64_t ble_watchdog_cooldown_until_ms = 0;
 
 	HeartbeatReaction reactions[HEARTBEAT_REACTION_COUNT];
+	/* UI-only state: showing the editor never toggles the reaction itself. */
+	bool reaction_ui_expanded[HEARTBEAT_REACTION_COUNT] = {};
 
 	std::string display_format = "heart_bpm";
 	std::string custom_format = "{heart} {bpm} BPM";
@@ -2086,6 +2149,49 @@ static bool mugen_heartbeat_address_has_user(uint64_t address)
 	}
 
 	return false;
+}
+
+/* A global BLE session can serve several Heartbeat sources. Only an enabled
+   auto-connect setting for this exact Band authorizes Windows maintenance. */
+static bool mugen_heartbeat_auto_maintenance_wanted(uint64_t address)
+{
+	if (!address)
+		return false;
+
+	std::scoped_lock lock(g_source_registry_mutex);
+	for (auto *source : g_source_registry) {
+		if (source && source->selected_address == address &&
+		    source->auto_connect && !source->auto_connect_paused &&
+		    !source->test_mode)
+			return true;
+	}
+
+	return false;
+}
+
+
+/* Several source instances can share one global BLE client. Show which
+   *other* source has opted into reconnecting to this same device. */
+static std::string mugen_heartbeat_other_auto_connect_source_name(
+	const mugen_heartbeat_source *ctx)
+{
+	if (!ctx || !ctx->selected_address)
+		return {};
+
+	std::scoped_lock lock(g_source_registry_mutex);
+	for (auto *other : g_source_registry) {
+		if (!other || other == ctx || !other->source ||
+		    other->selected_address != ctx->selected_address ||
+		    !other->auto_connect || other->auto_connect_paused ||
+		    other->test_mode)
+			continue;
+
+		const char *name = obs_source_get_name(other->source);
+		if (name && *name)
+			return name;
+	}
+
+	return {};
 }
 
 static const char *mugen_heartbeat_get_name(void *)
@@ -3277,8 +3383,25 @@ static void mugen_heartbeat_update(void *data, obs_data_t *settings)
 		ctx->next_auto_connect_ms = 0;
 	}
 
+	/* A previously clicked Connect must never silently target another Band. */
+	if (ctx->selected_address != previous_address) {
+		ctx->manual_connect_pending = false;
+		ctx->manual_connect_deadline_ms = 0;
+	}
+
 	if (!ctx->auto_connect)
 		ctx->auto_connect_paused = false;
+
+	/* Switching off auto-connect must immediately revoke Windows' waiting
+	   policy, even if the source is hidden and not receiving video ticks. */
+	if (g_ble &&
+	    (previous_auto_connect != ctx->auto_connect ||
+	     previous_address != ctx->selected_address)) {
+		const uint64_t active = g_ble->active_address();
+		if (active)
+			g_ble->set_connection_maintenance(
+				active, mugen_heartbeat_auto_maintenance_wanted(active));
+	}
 
 	const bool appearance_changed =
 		previous_visual_mode != ctx->visual_mode ||
@@ -3347,7 +3470,10 @@ static void *mugen_heartbeat_create(obs_data_t *settings, obs_source_t *source)
 	mugen_heartbeat_register_source(ctx);
 
 	blog(LOG_INFO,
-	     "[Mugen Heartbeat] source created (MTSDF glyph-atlas renderer; skin engine ready; GDI+ fallback ready)");
+	     "[Mugen Heartbeat] source created (autoConnect=%s selectedDevice=%s; "
+	     "MTSDF glyph-atlas renderer; skin engine ready; GDI+ fallback ready)",
+	     ctx->auto_connect ? "on" : "off",
+	     ctx->selected_address ? "yes" : "no");
 
 	return ctx;
 }
@@ -3817,6 +3943,29 @@ static bool mugen_heartbeat_skin_refresh_clicked(
 
 	return true;
 }
+static bool mugen_heartbeat_open_external_url(const wchar_t *url, const char *name)
+{
+	const HINSTANCE result = ShellExecuteW(
+		nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+	if (reinterpret_cast<INT_PTR>(result) <= 32)
+		blog(LOG_WARNING, "[Mugen Heartbeat] Could not open %s", name);
+	return false;
+}
+
+static bool mugen_heartbeat_about_project_clicked(
+	obs_properties_t *, obs_property_t *, void *)
+{
+	return mugen_heartbeat_open_external_url(
+		L"https://github.com/Mugen-Art-Lab/Mugen-Heartbeat", "project page");
+}
+
+static bool mugen_heartbeat_about_website_clicked(
+	obs_properties_t *, obs_property_t *, void *)
+{
+	return mugen_heartbeat_open_external_url(
+		L"https://mugenartlab.com/", "Mugen Art Lab website");
+}
+
 static bool mugen_heartbeat_skin_gallery_clicked(
 	obs_properties_t *,
 	obs_property_t *,
@@ -3882,7 +4031,9 @@ static bool connect_clicked(obs_properties_t *props, obs_property_t *, void *)
 	ctx->auto_connect_paused = false;
 
 	constexpr int64_t FRESH_ADVERTISEMENT_MS = 7000;
+	constexpr int64_t MANUAL_REQUEST_LIMIT_MS = 60000;
 	const int64_t now = mugen_heartbeat_now_ms();
+	ctx->manual_connect_deadline_ms = now + MANUAL_REQUEST_LIMIT_MS;
 
 	if (g_ble->seen_recently(address, FRESH_ADVERTISEMENT_MS)) {
 		ctx->manual_connect_pending = false;
@@ -3891,7 +4042,8 @@ static bool connect_clicked(obs_properties_t *props, obs_property_t *, void *)
 		blog(LOG_INFO,
 		     "[Mugen Heartbeat] manual Connect: fresh selected Band; connecting.");
 
-		g_ble->connect(address);
+		g_ble->connect(
+			address, mugen_heartbeat_auto_maintenance_wanted(address));
 	} else {
 		ctx->manual_connect_pending = true;
 		ctx->next_auto_connect_ms = now + 6000;
@@ -3912,13 +4064,23 @@ static bool disconnect_clicked(obs_properties_t *props, obs_property_t *, void *
 	if (!ctx)
 		return false;
 
+	/* A manual Connect can still be searching for its first advertisement.
+	   Cancel that pending search as well as established GATT connections. */
+	const bool cancel_manual_scan = ctx->manual_connect_pending && g_ble &&
+		g_ble->state() == BleState::Scanning;
 	ctx->auto_connect_paused = true;
 	ctx->manual_connect_pending = false;
+	ctx->manual_connect_deadline_ms = 0;
 	ctx->next_auto_connect_ms = 0;
+
+	if (g_ble && cancel_manual_scan)
+		g_ble->stop_scan();
 
 	if (g_ble &&
 	    ctx->selected_address != 0 &&
-	    g_ble->active_address() == ctx->selected_address) {
+	    g_ble->active_address() == ctx->selected_address &&
+	    (g_ble->state() == BleState::Connected ||
+	     g_ble->state() == BleState::Connecting)) {
 		blog(LOG_INFO,
 		     "[Mugen Heartbeat] manual Disconnect: cancelling active BLE session.");
 		g_ble->disconnect();
@@ -3927,6 +4089,143 @@ static bool disconnect_clicked(obs_properties_t *props, obs_property_t *, void *
 	return true;
 }
 
+
+/* The two pairing hints are context-sensitive:
+   - no selected device: explain the first device search;
+   - selected but disconnected: explain the Connect action;
+   - connecting: status/Cancel already explain the pending operation;
+   - connected: neither first-use instruction is needed.
+   OBS recreates properties on BLE revisions; the device combo and action
+   callbacks also update the currently open properties dialog. */
+static void mugen_heartbeat_sync_ble_pairing_help(
+	obs_properties_t *props, const mugen_heartbeat_source *ctx,
+	uint64_t selected_address)
+{
+	if (!props)
+		return;
+
+	const bool selected_connected =
+		g_ble && selected_address != 0 && g_ble->connected() &&
+		g_ble->connected_address() == selected_address;
+	const bool selected_connecting =
+		selected_address != 0 &&
+		((ctx && ctx->selected_address == selected_address &&
+		  ctx->manual_connect_pending) ||
+		 (g_ble && g_ble->active_address() == selected_address &&
+		  g_ble->state() == BleState::Connecting));
+
+	if (auto *help = obs_properties_get(props, "ble_help")) {
+		obs_property_set_description(
+			help,
+			obs_module_text(selected_address
+						? "MugenHeartbeat.BleHelpSelected"
+						: "MugenHeartbeat.BleHelp"));
+		obs_property_set_visible(
+			help, !selected_connected && !selected_connecting);
+	}
+
+	if (auto *xiaomi = obs_properties_get(props, "ble_xiaomi_help"))
+		obs_property_set_visible(xiaomi, !selected_connected);
+}
+
+static bool mugen_heartbeat_device_ui_modified(
+	obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	if (!props || !settings)
+		return false;
+
+	const uint64_t selected =
+		parse_bluetooth_address(
+			obs_data_get_string(settings, SETTING_DEVICE_ADDRESS));
+	mugen_heartbeat_sync_ble_pairing_help(
+		props, source_from_props(props), selected);
+	return true;
+}
+
+static const char *mugen_heartbeat_connection_button_locale_key(
+	const mugen_heartbeat_source *ctx)
+{
+	if (!ctx || !g_ble || !ctx->selected_address)
+		return "MugenHeartbeat.Connect";
+
+	if (g_ble->connected() &&
+	    g_ble->connected_address() == ctx->selected_address)
+		return "MugenHeartbeat.Disconnect";
+
+	if (ctx->manual_connect_pending ||
+	    (g_ble->active_address() == ctx->selected_address &&
+	     g_ble->state() == BleState::Connecting))
+		return "MugenHeartbeat.CancelConnection";
+
+	return "MugenHeartbeat.Connect";
+}
+
+static bool mugen_heartbeat_connection_button_clicked(
+	obs_properties_t *props, obs_property_t *property, void *priv)
+{
+	auto *ctx = source_from_props(props);
+	if (!ctx || !property || !g_ble)
+		return false;
+
+	const bool was_connected =
+		ctx->selected_address != 0 &&
+		g_ble->connected() &&
+		g_ble->connected_address() == ctx->selected_address;
+	const bool was_connecting =
+		ctx->selected_address != 0 &&
+		g_ble->active_address() == ctx->selected_address &&
+		g_ble->state() == BleState::Connecting;
+	const bool stop = was_connected || was_connecting ||
+		ctx->manual_connect_pending;
+
+	const bool handled = stop
+		? disconnect_clicked(props, property, priv)
+		: connect_clicked(props, property, priv);
+	if (!handled)
+		return false;
+
+	/* Button clicks refresh the CURRENT properties object in OBS.
+	   Label the pending scan as cancellable, and immediately return to
+	   Connect on manual disconnect without waiting for async GATT cleanup. */
+	const char *locale_key = stop
+		? "MugenHeartbeat.Connect"
+		: mugen_heartbeat_connection_button_locale_key(ctx);
+	obs_property_set_description(property, obs_module_text(locale_key));
+
+	/* Refresh open-dialog guidance immediately when connecting or cancelling;
+	   later BLE state revisions will refresh it again on connection changes. */
+	mugen_heartbeat_sync_ble_pairing_help(
+		props, ctx, ctx->selected_address);
+	return true;
+}
+
+static bool mugen_heartbeat_auto_connect_ui_modified(
+	obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	if (!props || !settings)
+		return false;
+
+	auto *notice = obs_properties_get(props, "ble_shared_auto_notice");
+	if (!notice)
+		return false;
+
+	const bool own_auto_connect =
+		obs_data_get_bool(settings, SETTING_AUTO_CONNECT);
+	const std::string other =
+		mugen_heartbeat_other_auto_connect_source_name(source_from_props(props));
+
+	if (!other.empty()) {
+		std::string text =
+			obs_module_text("MugenHeartbeat.OtherSourceAutoConnect");
+		text += ": ";
+		text += other;
+		obs_property_set_description(notice, text.c_str());
+	}
+
+	const bool show = !own_auto_connect && !other.empty();
+	obs_property_set_visible(notice, show);
+	return true;
+}
 
 struct HeartbeatSceneListEntry {
 	std::string label;
@@ -4406,6 +4705,63 @@ static bool heartbeat_reaction_source_modified(void *priv,
 	return true;
 }
 
+/* OBS 33's button callback refreshes the EXISTING properties object, it
+   does not call get_properties() again. Update the group's visibility on
+   the current object, not only the per-source state for future reloads.
+   The UI-only fold state never changes the persisted reaction enable flag. */
+static std::string heartbeat_reaction_editor_button_label(
+	const mugen_heartbeat_source *ctx, size_t index)
+{
+	const bool expanded = ctx && ctx->reaction_ui_expanded[index];
+	std::string label = obs_module_text(
+		expanded ? "MugenHeartbeat.ReactionCollapse"
+			 : "MugenHeartbeat.ReactionConfigure");
+	label += " — ";
+	label += obs_module_text(REACTION_GROUP_LOCALE_KEYS[index]);
+
+	if (ctx && ctx->reactions[index].enabled) {
+		label += " (";
+		label += obs_module_text("MugenHeartbeat.ReactionActive");
+		label += ")";
+	}
+
+	return label;
+}
+
+static bool heartbeat_reaction_toggle_ui_clicked(
+	obs_properties_t *props, obs_property_t *property, void *priv)
+{
+	auto *ctx = static_cast<mugen_heartbeat_source *>(priv);
+	if (!ctx || !property || !props)
+		return false;
+
+	const char *name = obs_property_name(property);
+	if (!name)
+		return false;
+
+	for (size_t i = 0; i < HEARTBEAT_REACTION_COUNT; ++i) {
+		if (std::string(name) != REACTION_UI_TOGGLE_KEYS[i])
+			continue;
+
+		obs_property_t *group = obs_properties_get(
+			props, REACTION_ENABLED_KEYS[i]);
+		if (!group)
+			return false;
+
+		ctx->reaction_ui_expanded[i] = !ctx->reaction_ui_expanded[i];
+		obs_property_set_visible(group, ctx->reaction_ui_expanded[i]);
+
+		const std::string label =
+			heartbeat_reaction_editor_button_label(ctx, i);
+		obs_property_set_description(property, label.c_str());
+
+		/* OBS will now redraw the mutated current properties object. */
+		return true;
+	}
+
+	return false;
+}
+
 static void heartbeat_reaction_add_properties(obs_properties_t *props,
 					      mugen_heartbeat_source *ctx,
 					      size_t index)
@@ -4544,13 +4900,27 @@ static void heartbeat_reaction_add_properties(obs_properties_t *props,
 		heartbeat_reaction_source_modified,
 		callback_index);
 
-	obs_properties_add_group(
+	/* The button controls visibility only; the existing checkable group
+	   remains the actual saved enable/disable setting. */
+	const bool expanded = ctx && ctx->reaction_ui_expanded[index];
+	const std::string editor_button_label =
+		heartbeat_reaction_editor_button_label(ctx, index);
+
+	obs_properties_add_button2(
+		props,
+		REACTION_UI_TOGGLE_KEYS[index],
+		editor_button_label.c_str(),
+		heartbeat_reaction_toggle_ui_clicked,
+		ctx);
+
+	obs_property_t *reaction_group = obs_properties_add_group(
 		props,
 		REACTION_ENABLED_KEYS[index],
-		obs_module_text(
-			REACTION_GROUP_LOCALE_KEYS[index]),
+		obs_module_text(REACTION_GROUP_LOCALE_KEYS[index]),
 		OBS_GROUP_CHECKABLE,
 		content);
+	if (reaction_group)
+		obs_property_set_visible(reaction_group, expanded);
 }
 
 static bool mugen_heartbeat_display_format_modified(obs_properties_t *props,
@@ -4575,14 +4945,146 @@ static bool mugen_heartbeat_display_format_modified(obs_properties_t *props,
 	return true;
 }
 
+static bool mugen_heartbeat_test_mode_modified(
+	obs_properties_t *props, obs_property_t *, obs_data_t *settings)
+{
+	if (!props || !settings)
+		return false;
+
+	auto *test_bpm_prop = obs_properties_get(props, SETTING_TEST_BPM);
+	if (test_bpm_prop)
+		obs_property_set_visible(
+			test_bpm_prop, obs_data_get_bool(settings, SETTING_TEST_MODE));
+	return true;
+}
+
 static obs_properties_t *mugen_heartbeat_get_properties(void *data)
 {
 	auto *ctx = static_cast<mugen_heartbeat_source *>(data);
 	obs_properties_t *props = obs_properties_create_param(ctx, nullptr);
 
-	obs_properties_add_bool(props, SETTING_TEST_MODE, obs_module_text("MugenHeartbeat.TestMode"));
-	obs_properties_add_int_slider(props, SETTING_TEST_BPM,
-				      obs_module_text("MugenHeartbeat.TestBpm"), 30, 240, 1);
+	/* Connect the heart-rate device before diving into appearance/reactions. */
+	obs_properties_add_text(props, "ble_heading",
+				obs_module_text("MugenHeartbeat.BleHeading"), OBS_TEXT_INFO);
+
+	auto *device_prop = obs_properties_add_list(
+		props, SETTING_DEVICE_ADDRESS, obs_module_text("MugenHeartbeat.Device"),
+		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_set_modified_callback(
+		device_prop, mugen_heartbeat_device_ui_modified);
+
+	bool selected_address_is_listed = false;
+
+	if (g_ble) {
+		for (auto const &device : g_ble->devices()) {
+			HeartRateDeviceInfo shown = device;
+			shown.name = preferred_ble_name(
+				shown.name,
+				g_ble->known_name_for(device.address));
+
+			if (ctx && device.address == ctx->selected_address &&
+			    !ctx->selected_device_name.empty()) {
+				shown.name = preferred_ble_name(
+					shown.name,
+					ctx->selected_device_name);
+			}
+
+			if (g_ble->connected() &&
+			    g_ble->connected_address() == device.address) {
+				shown.name = preferred_ble_name(
+					shown.name,
+					g_ble->connected_name());
+			}
+
+			std::string label = display_device(shown);
+			std::string value = bluetooth_address_value(device.address);
+			obs_property_list_add_string(device_prop, label.c_str(), value.c_str());
+
+			if (ctx && device.address == ctx->selected_address)
+				selected_address_is_listed = true;
+		}
+	}
+
+	/* OBS persists the selected address even when no scan has happened yet.
+	   Keep that value in the combo so the user can see what will auto-connect. */
+	if (ctx && ctx->selected_address != 0 && !selected_address_is_listed) {
+		std::string saved_name =
+			!ctx->selected_device_name.empty()
+				? ctx->selected_device_name
+				: obs_module_text("MugenHeartbeat.SavedDevice");
+
+		if (g_ble) {
+			saved_name = preferred_ble_name(
+				saved_name,
+				g_ble->known_name_for(ctx->selected_address));
+
+			if (g_ble->connected() &&
+			    g_ble->connected_address() == ctx->selected_address) {
+				saved_name = preferred_ble_name(
+					saved_name,
+					g_ble->connected_name());
+			}
+		}
+
+		HeartRateDeviceInfo saved{ctx->selected_address, saved_name, 0, 0, BluetoothAddressType::Unspecified, false};
+		std::string label = display_device(saved);
+		std::string value = bluetooth_address_value(saved.address);
+		obs_property_list_add_string(device_prop, label.c_str(), value.c_str());
+	}
+
+	auto *auto_connect_prop =
+		obs_properties_add_bool(props, SETTING_AUTO_CONNECT,
+					obs_module_text("MugenHeartbeat.AutoConnect"));
+	obs_property_set_modified_callback(
+		auto_connect_prop, mugen_heartbeat_auto_connect_ui_modified);
+
+	obs_properties_add_button(
+		props, "start_scan",
+		obs_module_text("MugenHeartbeat.StartScan"), scan_clicked);
+
+	obs_properties_add_button(
+		props, "connection_action",
+		obs_module_text(mugen_heartbeat_connection_button_locale_key(ctx)),
+		mugen_heartbeat_connection_button_clicked);
+
+	std::string status = localized_ble_status(ctx);
+	if (ctx && ctx->auto_connect && ctx->auto_connect_paused &&
+	    g_ble && !g_ble->connected()) {
+		status += " — ";
+		status += obs_module_text("MugenHeartbeat.AutoConnectPaused");
+	}
+
+	obs_properties_add_text(props, "ble_status", status.c_str(), OBS_TEXT_INFO);
+
+	const std::string other_auto_source =
+		mugen_heartbeat_other_auto_connect_source_name(ctx);
+	std::string other_auto_notice =
+		obs_module_text("MugenHeartbeat.OtherSourceAutoConnect");
+	if (!other_auto_source.empty())
+		other_auto_notice += ": " + other_auto_source;
+	auto *other_notice_prop = obs_properties_add_text(
+		props, "ble_shared_auto_notice", other_auto_notice.c_str(),
+		OBS_TEXT_INFO);
+	obs_property_set_visible(
+		other_notice_prop,
+		ctx && !ctx->auto_connect && !other_auto_source.empty());
+
+	obs_properties_add_text(props, "ble_help",
+				obs_module_text("MugenHeartbeat.BleHelp"), OBS_TEXT_INFO);
+	obs_properties_add_text(props, "ble_xiaomi_help",
+				obs_module_text("MugenHeartbeat.XiaomiHelp"), OBS_TEXT_INFO);
+	mugen_heartbeat_sync_ble_pairing_help(
+		props, ctx, ctx ? ctx->selected_address : 0);
+
+	auto *test_mode_prop = obs_properties_add_bool(
+		props, SETTING_TEST_MODE,
+		obs_module_text("MugenHeartbeat.TestMode"));
+	auto *test_bpm_prop = obs_properties_add_int_slider(
+		props, SETTING_TEST_BPM,
+		obs_module_text("MugenHeartbeat.TestBpm"), 30, 240, 1);
+	obs_property_set_visible(test_bpm_prop, ctx && ctx->test_mode);
+	obs_property_set_modified_callback(
+		test_mode_prop, mugen_heartbeat_test_mode_modified);
 
 	auto *visual_mode_prop = obs_properties_add_list(
 		props,
@@ -4862,94 +5364,26 @@ static obs_properties_t *mugen_heartbeat_get_properties(void *data)
 	for (size_t i = 0; i < HEARTBEAT_REACTION_COUNT; ++i)
 		heartbeat_reaction_add_properties(props, ctx, i);
 
-	obs_properties_add_text(props, "ble_heading",
-				obs_module_text("MugenHeartbeat.BleHeading"), OBS_TEXT_INFO);
+	/* Project links belong after the functional source settings. */
+	obs_properties_t *about = obs_properties_create();
+	const std::string about_info =
+		std::string("Mugen Heartbeat ") + PLUGIN_VERSION + "\n" +
+		obs_module_text("MugenHeartbeat.About.ProjectBy") + "\n" +
+		obs_module_text("MugenHeartbeat.About.FreeSoftware");
+	obs_properties_add_text(
+		about, "about_info", about_info.c_str(), OBS_TEXT_INFO);
+	obs_properties_add_button(
+		about, "about_project_page",
+		obs_module_text("MugenHeartbeat.About.ProjectPage"),
+		mugen_heartbeat_about_project_clicked);
+	obs_properties_add_button(
+		about, "about_website",
+		obs_module_text("MugenHeartbeat.About.MugenArtLab"),
+		mugen_heartbeat_about_website_clicked);
+	obs_properties_add_group(
+		props, "about", obs_module_text("MugenHeartbeat.About"),
+		OBS_GROUP_NORMAL, about);
 
-	auto *device_prop = obs_properties_add_list(
-		props, SETTING_DEVICE_ADDRESS, obs_module_text("MugenHeartbeat.Device"),
-		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
-
-	bool selected_address_is_listed = false;
-
-	if (g_ble) {
-		for (auto const &device : g_ble->devices()) {
-			HeartRateDeviceInfo shown = device;
-			shown.name = preferred_ble_name(
-				shown.name,
-				g_ble->known_name_for(device.address));
-
-			if (ctx && device.address == ctx->selected_address &&
-			    !ctx->selected_device_name.empty()) {
-				shown.name = preferred_ble_name(
-					shown.name,
-					ctx->selected_device_name);
-			}
-
-			if (g_ble->connected() &&
-			    g_ble->connected_address() == device.address) {
-				shown.name = preferred_ble_name(
-					shown.name,
-					g_ble->connected_name());
-			}
-
-			std::string label = display_device(shown);
-			std::string value = bluetooth_address_value(device.address);
-			obs_property_list_add_string(device_prop, label.c_str(), value.c_str());
-
-			if (ctx && device.address == ctx->selected_address)
-				selected_address_is_listed = true;
-		}
-	}
-
-	/* OBS persists the selected address even when no scan has happened yet.
-	   Keep that value in the combo so the user can see what will auto-connect. */
-	if (ctx && ctx->selected_address != 0 && !selected_address_is_listed) {
-		std::string saved_name =
-			!ctx->selected_device_name.empty()
-				? ctx->selected_device_name
-				: obs_module_text("MugenHeartbeat.SavedDevice");
-
-		if (g_ble) {
-			saved_name = preferred_ble_name(
-				saved_name,
-				g_ble->known_name_for(ctx->selected_address));
-
-			if (g_ble->connected() &&
-			    g_ble->connected_address() == ctx->selected_address) {
-				saved_name = preferred_ble_name(
-					saved_name,
-					g_ble->connected_name());
-			}
-		}
-
-		HeartRateDeviceInfo saved{ctx->selected_address, saved_name, 0, 0, BluetoothAddressType::Unspecified, false};
-		std::string label = display_device(saved);
-		std::string value = bluetooth_address_value(saved.address);
-		obs_property_list_add_string(device_prop, label.c_str(), value.c_str());
-	}
-
-	obs_properties_add_bool(props, SETTING_AUTO_CONNECT,
-				obs_module_text("MugenHeartbeat.AutoConnect"));
-
-	obs_properties_add_button(props, "start_scan",
-				  obs_module_text("MugenHeartbeat.StartScan"), scan_clicked);
-	obs_properties_add_button(props, "connect",
-				  obs_module_text("MugenHeartbeat.Connect"), connect_clicked);
-	obs_properties_add_button(props, "disconnect",
-				  obs_module_text("MugenHeartbeat.Disconnect"), disconnect_clicked);
-
-	std::string status = localized_ble_status(ctx);
-	if (ctx && ctx->auto_connect && ctx->auto_connect_paused &&
-	    g_ble && !g_ble->connected()) {
-		status += " — ";
-		status += obs_module_text("MugenHeartbeat.AutoConnectPaused");
-	}
-
-	obs_properties_add_text(props, "ble_status", status.c_str(), OBS_TEXT_INFO);
-	obs_properties_add_text(props, "ble_help",
-				obs_module_text("MugenHeartbeat.BleHelp"), OBS_TEXT_INFO);
-	obs_properties_add_text(props, "ble_xiaomi_help",
-				obs_module_text("MugenHeartbeat.XiaomiHelp"), OBS_TEXT_INFO);
 
 	return props;
 }
@@ -5052,6 +5486,15 @@ static void mugen_heartbeat_tick(void *data, float)
 		return;
 
 	if (g_ble) {
+		/* A live manually connected Band is allowed to keep streaming.
+		   Only checked auto-connect sources may ask Windows to reconnect
+		   when a physical BLE link disappears. */
+		const uint64_t active_band = g_ble->active_address();
+		if (active_band)
+			g_ble->set_connection_maintenance(
+				active_band,
+				mugen_heartbeat_auto_maintenance_wanted(active_band));
+
 		const uint64_t revision = g_ble->revision();
 		if (revision != ctx->last_ble_revision) {
 			ctx->last_ble_revision = revision;
@@ -5112,8 +5555,18 @@ static void mugen_heartbeat_tick(void *data, float)
 				"stale session released; waiting for a fresh advertisement.");
 		}
 	}
-/* Manual Connect is also presence-gated, but unlike auto-connect it
-		   keeps trying even when the checkbox is disabled. */
+/* Manual Connect works without auto-connect, but only for a finite
+		   period after the user's explicit button click. */
+		if (ctx->manual_connect_pending &&
+		    (ctx->manual_connect_deadline_ms == 0 ||
+		     mugen_heartbeat_now_ms() >=
+			     ctx->manual_connect_deadline_ms)) {
+			ctx->manual_connect_pending = false;
+			ctx->manual_connect_deadline_ms = 0;
+			blog(LOG_INFO,
+			     "[Mugen Heartbeat] manual Connect request expired; "
+			     "waiting for another explicit Connect click.");
+		}
 		if (ctx->manual_connect_pending &&
 		    !ctx->test_mode &&
 		    ctx->selected_address != 0 &&
@@ -5126,12 +5579,16 @@ static void mugen_heartbeat_tick(void *data, float)
 				    ctx->selected_address,
 				    MANUAL_FRESH_ADVERTISEMENT_MS)) {
 				ctx->manual_connect_pending = false;
+				ctx->manual_connect_deadline_ms = 0;
 				ctx->next_auto_connect_ms = manual_now + 5000;
 
 				blog(LOG_INFO,
 				     "[Mugen Heartbeat] manual Connect: fresh advertisement arrived; connecting.");
 
-				g_ble->connect(ctx->selected_address);
+				g_ble->connect(
+					ctx->selected_address,
+					mugen_heartbeat_auto_maintenance_wanted(
+						ctx->selected_address));
 			} else if ((manual_state == BleState::Idle ||
 				    manual_state == BleState::Error) &&
 				   manual_now >= ctx->next_auto_connect_ms) {
@@ -5163,7 +5620,7 @@ static void mugen_heartbeat_tick(void *data, float)
 					ctx->next_auto_connect_ms = now + 5000;
 					blog(LOG_INFO,
 					     "[Mugen Heartbeat] BLE auto-reconnect: fresh selected-band advertisement; connecting.");
-					g_ble->connect(ctx->selected_address);
+					g_ble->connect(ctx->selected_address, true);
 				} else {
 					ctx->next_auto_connect_ms = now + 6000;
 					blog(LOG_INFO,

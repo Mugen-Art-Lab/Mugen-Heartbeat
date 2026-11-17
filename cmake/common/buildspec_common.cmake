@@ -62,13 +62,20 @@ function(_setup_obs_studio)
     set(_cmake_extra "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
   endif()
 
+  # Nested OBS must inherit the parent's validated pre-built/Qt6 prefixes.
+  # execute_process(COMMAND) is not a shell: wrapping paths in literal
+  # single quotes makes CMake treat the quotes as part of the directory.
+  if(OS_WINDOWS AND NOT CMAKE_PREFIX_PATH)
+    message(FATAL_ERROR "Missing parent dependencies for nested OBS configure")
+  endif()
+
   message(STATUS "Configure ${label} (${arch})")
   execute_process(
     COMMAND
       "${CMAKE_COMMAND}" -S "${dependencies_dir}/${_obs_destination}" -B
       "${dependencies_dir}/${_obs_destination}/build_${arch}" -G ${_cmake_generator} "${_cmake_arch}"
       -DOBS_CMAKE_VERSION:STRING=3.0.0 -DENABLE_PLUGINS:BOOL=OFF -DENABLE_FRONTEND:BOOL=OFF
-      -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH='${CMAKE_PREFIX_PATH}'" ${_is_fresh}
+      -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH:STRING=${CMAKE_PREFIX_PATH}" ${_is_fresh}
       ${_cmake_extra}
     RESULT_VARIABLE _process_result
     COMMAND_ERROR_IS_FATAL ANY
@@ -166,6 +173,12 @@ function(_check_dependencies)
     endif()
 
     if(skip)
+      # A reused dependency must remain visible to the nested OBS configure.
+      # Without this, its CMake can try downloading Qt6 a second time even
+      # though the parent already has a valid package and VERSION marker.
+      if(dependency STREQUAL prebuilt OR dependency STREQUAL qt6)
+        list(APPEND CMAKE_PREFIX_PATH "${dependencies_dir}/${destination}")
+      endif()
       message(STATUS "Setting up ${label} (${arch}) - skipped")
       continue()
     endif()

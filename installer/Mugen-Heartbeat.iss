@@ -3,10 +3,11 @@
 
 #define MyAppName "Mugen Heartbeat"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.37"
+  #error MyAppVersion is required. Use installer\build-installer.ps1.
 #endif
 #define MyAppPublisher "Mugen Art Lab"
-#define MyAppURL "https://github.com/Mugen-Art-Lab/Mugen-Heartbeat"
+#define MyAppURL "https://mugenartlab.com/"
+#define MyRepoURL "https://github.com/Mugen-Art-Lab/Mugen-Heartbeat"
 #define MyPluginName "mugen-heartbeat"
 
 #ifndef PayloadRoot
@@ -26,8 +27,8 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}/issues
-AppUpdatesURL={#MyAppURL}/releases
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyRepoURL}/releases
 AppCopyright=Copyright (C) 2026 Mugen Art Lab
 DefaultDirName={commonappdata}\obs-studio\plugins\{#MyPluginName}
 DisableDirPage=yes
@@ -61,6 +62,15 @@ english.SelectLanguageTitle=Select setup language / Выберите язык у
 english.SelectLanguageLabel=Choose the language for installation / Выберите язык установки
 russian.SelectLanguageTitle=Select setup language / Выберите язык установки
 russian.SelectLanguageLabel=Choose the language for installation / Выберите язык установки
+
+; The InfoAfterFile page is shown after files have already been installed.
+; Replace Inno Setup's generic "continue installation" language only here.
+english.WizardInfoAfter=Installation complete
+english.InfoAfterLabel=Mugen Heartbeat is ready to use. Here are a few helpful tips.
+english.InfoAfterClickLabel=Click Next to finish Setup.
+russian.WizardInfoAfter=Установка завершена
+russian.InfoAfterLabel=Mugen Heartbeat готов к работе. Ниже — несколько полезных советов.
+russian.InfoAfterClickLabel=Нажмите «Далее», чтобы завершить работу мастера.
 
 [CustomMessages]
 english.CloseObsTitle=OBS Studio is running

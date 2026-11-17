@@ -27,12 +27,33 @@ Close OBS Studio and extract the `mugen-heartbeat` folder from
 
 `C:\ProgramData\obs-studio\plugins`
 
-The final DLL path must be:
+The ZIP includes the same DLL in two locations for OBS compatibility:
 
-`C:\ProgramData\obs-studio\plugins\mugen-heartbeat\bin\64bit\mugen-heartbeat.dll`
+- OBS Studio 33 and later: `C:\ProgramData\obs-studio\plugins\mugen-heartbeat\mugen-heartbeat.dll`
+- OBS Studio 31/32: `C:\ProgramData\obs-studio\plugins\mugen-heartbeat\bin\64bit\mugen-heartbeat.dll`
+
+Do not remove either DLL copy; OBS selects the appropriate layout. The plugin metadata for the OBS 33 plugin manager lives at `data\manifest.json`.
 
 To remove a manual installation, close OBS Studio and delete the installed
 `mugen-heartbeat` folder.
+
+## Portable OBS ZIP (32 and 33+)
+
+Close the portable OBS installation completely. Extract
+`Mugen-Heartbeat-<version>-Windows-x64-portable.zip` **into the OBS root folder**.
+The archive contains both OBS loader layouts:
+
+```text
+plugins\mugen-heartbeat\mugen-heartbeat.dll             (OBS 33+)
+plugins\mugen-heartbeat\data\...                    (OBS 33+)
+obs-plugins\64bit\mugen-heartbeat.dll                 (OBS 32)
+data\obs-plugins\mugen-heartbeat\...                (OBS 32, including skins)
+```
+
+Both loader layouts contain the **same compiled DLL**. The portable ZIP does not
+install anything under `ProgramData`. To remove it, close OBS and delete only
+`plugins\mugen-heartbeat`, `obs-plugins\64bit\mugen-heartbeat.dll`,
+and `data\obs-plugins\mugen-heartbeat`. Keep the shared parent folders.
 
 ## User settings and skins
 

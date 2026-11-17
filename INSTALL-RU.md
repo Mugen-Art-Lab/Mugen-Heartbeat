@@ -27,12 +27,34 @@ Windows SmartScreen может показать предупреждение о 
 
 `C:\ProgramData\obs-studio\plugins`
 
-Итоговый путь DLL должен быть:
+ZIP содержит две одинаковые DLL для совместимости с разными версиями OBS:
 
-`C:\ProgramData\obs-studio\plugins\mugen-heartbeat\bin\64bit\mugen-heartbeat.dll`
+- OBS Studio 33 и новее: `C:\ProgramData\obs-studio\plugins\mugen-heartbeat\mugen-heartbeat.dll`
+- OBS Studio 31/32: `C:\ProgramData\obs-studio\plugins\mugen-heartbeat\bin\64bit\mugen-heartbeat.dll`
+
+Не удаляй ни одну из копий: OBS выберет подходящий вариант. Метаданные для менеджера плагинов OBS 33 находятся в `data\manifest.json`.
 
 Для ручного удаления полностью закрой OBS и удали установленную папку
 `mugen-heartbeat`.
+
+## ZIP для портативной OBS (32 и 33+)
+
+Полностью закрой портативную OBS. Распакуй содержимое
+`Mugen-Heartbeat-<version>-Windows-x64-portable.zip` **в корень папки OBS**,
+например `C:\OBS-Portable`. В архиве сразу две структуры:
+
+```text
+plugins\mugen-heartbeat\mugen-heartbeat.dll             (OBS 33+)
+plugins\mugen-heartbeat\data\...                    (OBS 33+)
+obs-plugins\64bit\mugen-heartbeat.dll                 (OBS 32)
+data\obs-plugins\mugen-heartbeat\...                (OBS 32, включая скины)
+```
+
+Оба пути используют **одну и ту же DLL**, повторно собирать плагин не нужно.
+Портативный ZIP не устанавливает ничего в `ProgramData`.
+Для ручного удаления сначала закрой OBS, затем удали только
+`plugins\mugen-heartbeat`, `obs-plugins\64bit\mugen-heartbeat.dll`
+и `data\obs-plugins\mugen-heartbeat`. Не удаляй общие папки других плагинов.
 
 ## Пользовательские настройки и скины
 
