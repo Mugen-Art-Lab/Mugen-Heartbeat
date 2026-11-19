@@ -11,6 +11,12 @@ Windows. Плагин напрямую подключается к совмес�
 
 Текущее устройство, проверенное на реальном железе: **Xiaomi Smart Band 10**.
 
+<p align="center">
+  <img src="previews/MugiHeartBeat_NewRelease.webp" alt="Мюги представляет Mugen Heartbeat 0.1.38 и зелёную, жёлтую и красную зоны пульса" width="600">
+</p>
+
+<p align="center"><em>От спокойствия до полного хаоса — твой пульс в OBS!</em></p>
+
 ## Скриншоты
 
 ### Heartbeat Lite

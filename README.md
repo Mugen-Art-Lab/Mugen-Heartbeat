@@ -11,6 +11,12 @@ subscription.
 
 The current hardware-verified target is **Xiaomi Smart Band 10**.
 
+<p align="center">
+  <img src="previews/MugiHeartBeat_NewRelease.webp" alt="Mugi presenting Mugen Heartbeat 0.1.38 and its green, yellow and red heart-rate zones" width="600">
+</p>
+
+<p align="center"><em>From calm to chaos — bring your heartbeat into OBS!</em></p>
+
 ## Preview
 
 ### Heartbeat Lite
